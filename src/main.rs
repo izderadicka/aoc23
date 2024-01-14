@@ -63,7 +63,7 @@ fn second_task_2() {
     let mut sum = 0;
     for line in f.lines() {
         let line = line.expect("Problem reading line");
-        let (_input, (id, games)) = parser::parse_game_line(&line).unwrap();
+        let (_input, (_id, games)) = parser::parse_game_line(&line).unwrap();
         let max_game = games
             .iter()
             .fold(Game::default(), |acc, game| acc.max(game));
