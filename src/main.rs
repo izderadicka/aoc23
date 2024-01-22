@@ -3,13 +3,13 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use crate::day5::fifth_task_2;
+use crate::day12::twelveth_task_1 as the_task;
 
-mod day5;
+mod day12;
 fn main() {
     let file_name = std::env::args().nth(1).expect("Missing file name");
     let f = BufReader::new(File::open(file_name).expect("Problem opening file"));
-    let res = fifth_task_2(f);
+    let res = the_task(f);
     println!("Result: {}", res);
 }
 
