@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use crate::day13::thirteens_task_1 as the_task;
+use crate::day13::thirteens_task_2 as the_task;
 
 mod day13;
 fn main() {

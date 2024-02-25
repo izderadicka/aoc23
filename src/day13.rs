@@ -67,21 +67,43 @@ impl Mirror {
 
     fn split(&self) -> Option<usize> {
         'outer: for i in 1..self.map.len() {
-            if self.map[i] == self.map[i - 1] {
+            let mut fixed = false;
+            let mut can_fix = |v1, v2| {
+                if !fixed && distance(v1, v2) == 1 {
+                    // println!("Fixing {:?} and {:?}", v1, v2);
+                    fixed = true;
+                    true
+                } else {
+                    false
+                }
+            };
+            if self.map[i] == self.map[i - 1] || can_fix(&self.map[i], &self.map[i - 1]) {
                 let steps = (self.map.len() - i - 1).min(i - 1);
                 for j in 1..=steps {
+                    if can_fix(&self.map[i + j], &self.map[i - j - 1]) {
+                        continue;
+                    }
                     if self.map[i + j] != self.map[i - j - 1] {
                         continue 'outer;
                     }
                 }
-                return Some(i);
+                if fixed {
+                    return Some(i);
+                }
             }
         }
         None
     }
 }
 
-pub fn thirteens_task_1(mut f: impl BufRead) -> u64 {
+fn distance(v1: &Vec<Cell>, v2: &Vec<Cell>) -> usize {
+    v1.iter()
+        .zip(v2.iter())
+        .map(|(a, b)| if a == b { 0 } else { 1 })
+        .sum()
+}
+
+pub fn thirteens_task_2(mut f: impl BufRead) -> u64 {
     let mut nun_mirrors = 0;
     let mut sum = 0;
     loop {
@@ -100,7 +122,7 @@ pub fn thirteens_task_1(mut f: impl BufRead) -> u64 {
             }
 
             if !has_split {
-                panic!()
+                panic!("No split found in mirror {}", nun_mirrors);
             }
 
             nun_mirrors += 1;
