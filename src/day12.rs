@@ -1,15 +1,10 @@
-use std::{collections::VecDeque, io::BufRead};
+use std::io::BufRead;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Token {
     Working,
     Damaged,
     Unknown,
-}
-
-enum Next {
-    Some(Vec<Sample>),
-    None(Sample),
 }
 
 impl TryFrom<char> for Token {
@@ -24,82 +19,58 @@ impl TryFrom<char> for Token {
         }
     }
 }
-#[derive(Debug, Clone)]
-struct Sample {
-    remaining_pattern: VecDeque<Token>,
-    groups: Vec<u16>,
-    in_group: bool,
-}
-impl Sample {
-    fn new(pattern: &str) -> Self {
-        Self {
-            remaining_pattern: pattern.chars().map(|x| x.try_into().unwrap()).collect(),
-            groups: Vec::new(),
-            in_group: false,
-        }
-    }
 
-    fn inc_group(&mut self) {
-        if self.in_group {
-            self.groups.last_mut().map(|x| *x += 1).expect("no group");
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+struct State {
+    pos: usize,
+    group_pos: usize,
+    group_size: u16,
+}
+
+type Cache = std::collections::HashMap<State, u64>;
+
+fn process_mem(cache: &mut Cache, pattern: &[Token], groups: &[u16], state: State) -> u64 {
+    if let Some(res) = cache.get(&state) {
+        // println!("For state {:?} result is {}", state, res);
+        return *res;
+    }
+    let res = process_rec(cache, pattern, groups, state.clone());
+    cache.insert(state, res);
+    res
+}
+
+fn process_rec(cache: &mut Cache, pattern: &[Token], groups: &[u16], mut state: State) -> u64 {
+    if state.pos >= pattern.len() {
+        if state.group_pos == groups.len() && state.group_size == 0 {
+            1
+        } else if state.group_pos == groups.len() - 1 && state.group_size == groups[state.group_pos]
+        {
+            1
         } else {
-            self.groups.push(1);
+            0
         }
-        self.in_group = true
-    }
+    } else {
+        let mut res = 0;
 
-    fn to_next(mut self) -> Next {
-        match self.remaining_pattern.pop_front() {
-            Some(Token::Working) => {
-                self.in_group = false;
-                Next::Some(vec![self])
-            }
-            Some(Token::Damaged) => {
-                self.inc_group();
-                Next::Some(vec![self])
-            }
-            Some(Token::Unknown) => {
-                let mut first = self.clone();
-                first.inc_group();
-                let mut second = self;
-                second.in_group = false;
-                Next::Some(vec![first, second])
-            }
-            None => Next::None(self),
-        }
-    }
-
-    fn is_valid(&self, groups: &[u16]) -> bool {
-        self.remaining_pattern.is_empty() && self.groups == groups
-    }
-
-    fn is_acceptable(&self, groups: &[u16]) -> bool {
-        self.groups.len() <= groups.len()
-            && self.groups.iter().zip(groups.iter()).all(|(x, y)| x <= y)
-    }
-
-    fn is_complete(&self) -> bool {
-        self.remaining_pattern.is_empty()
-    }
-}
-
-fn process_one(pattern: &str, groups: &[u16]) -> u64 {
-    let mut samples = vec![Sample::new(pattern)];
-    let mut count = 0;
-    while !samples.is_empty() {
-        let sample = samples.pop().unwrap();
-        match sample.to_next() {
-            Next::Some(new_samples) => {
-                samples.extend(new_samples.into_iter().filter(|x| x.is_acceptable(groups)))
-            }
-            Next::None(sample) => {
-                if sample.is_valid(groups) {
-                    count += 1
-                }
+        let current = pattern[state.pos];
+        state.pos += 1;
+        if current == Token::Working || current == Token::Unknown {
+            let mut state = state.clone();
+            if state.group_size == 0 {
+                res += process_mem(cache, pattern, groups, state);
+            } else if state.group_pos < groups.len() && groups[state.group_pos] == state.group_size
+            {
+                state.group_pos += 1;
+                state.group_size = 0;
+                res += process_mem(cache, pattern, groups, state);
             }
         }
+        if current == Token::Damaged || current == Token::Unknown {
+            state.group_size += 1;
+            res += process_mem(cache, pattern, groups, state);
+        }
+        res
     }
-    count
 }
 
 pub fn twelveth_task_1(f: impl BufRead) -> u64 {
@@ -114,7 +85,46 @@ pub fn twelveth_task_1(f: impl BufRead) -> u64 {
             .split(',')
             .map(|x| x.parse::<u16>().unwrap())
             .collect();
-        let variants = process_one(pattern, &groups);
+        let pattern2 = pattern
+            .chars()
+            .map(|x| x.try_into().unwrap())
+            .collect::<Vec<_>>();
+        let mut cache = std::collections::HashMap::new();
+        let variants = process_rec(&mut cache, &pattern2, &groups, State::default());
+        println!("{} {:?} => {}", pattern, groups, variants);
+        sum += variants;
+    }
+
+    sum
+}
+
+pub fn twelveth_task_2(f: impl BufRead) -> u64 {
+    let mut sum = 0;
+    for line in f.lines() {
+        let line = line.unwrap();
+        let mut iter = line.split_ascii_whitespace();
+        let pattern = iter.next().unwrap();
+        let mut ext_pattern = pattern.to_string();
+        for _ in 0..4 {
+            ext_pattern.push('?');
+            ext_pattern.push_str(pattern);
+        }
+        let groups: Vec<_> = iter
+            .next()
+            .unwrap()
+            .split(',')
+            .map(|x| x.parse::<u16>().unwrap())
+            .collect();
+        let mut ext_groups = groups.clone();
+        for _ in 0..4 {
+            ext_groups.extend(groups.iter());
+        }
+        let ext_pattern = ext_pattern
+            .chars()
+            .map(|x| x.try_into().unwrap())
+            .collect::<Vec<_>>();
+        let mut cache = std::collections::HashMap::new();
+        let variants = process_rec(&mut cache, &ext_pattern, &ext_groups, State::default());
         println!("{} {:?} => {}", pattern, groups, variants);
         sum += variants;
     }
