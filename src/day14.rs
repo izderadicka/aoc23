@@ -89,9 +89,7 @@ impl Map {
                 Some(n) => {
                     self.map[n][j] = Cell::RoundedRock;
                     self.map[i][j] = Cell::Empty;
-                    //let new_n = ((n as isize) + increment).max(0) as usize;
-                    let new_n = n + 1;
-                    spaces[j] = Some(new_n);
+                    spaces[j] = Some(((n as isize) + increment).max(0) as usize);
                 }
                 None => {}
             },
@@ -119,16 +117,11 @@ impl Map {
             South => {
                 for i in (0..self.map.len()).rev() {
                     for j in 0..self.width {
-                        self.roll(i, j, &mut spaces, -1);
+                        self.roll(i, j, &mut spaces, 1);
                     }
                 }
             }
             East => todo!(),
-        }
-        for i in 0..self.map.len() {
-            for j in 0..self.width {
-                self.roll(i, j, &mut spaces, 1);
-            }
         }
     }
 
