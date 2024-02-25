@@ -1,4 +1,4 @@
-use std::{fmt::Display, io::BufRead};
+use std::{collections::HashMap, fmt::Display, io::BufRead};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 enum Cell {
@@ -44,7 +44,7 @@ impl Direction {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Map {
     map: Vec<Vec<Cell>>,
     width: usize,
@@ -79,7 +79,13 @@ impl Map {
         Self { map, width, height }
     }
 
-    fn roll(&mut self, i: usize, j: usize, spaces: &mut Vec<Option<usize>>, increment: isize) {
+    fn roll_vertical(
+        &mut self,
+        i: usize,
+        j: usize,
+        spaces: &mut Vec<Option<usize>>,
+        increment: isize,
+    ) {
         match self.map[i][j] {
             Cell::Empty => match spaces[j] {
                 Some(_n) => {}
@@ -97,6 +103,30 @@ impl Map {
         }
     }
 
+    fn roll_horizontal(
+        &mut self,
+        i: usize,
+        j: usize,
+        spaces: &mut Vec<Option<usize>>,
+        increment: isize,
+    ) {
+        match self.map[i][j] {
+            Cell::Empty => match spaces[i] {
+                Some(_n) => {}
+                None => spaces[i] = Some(j),
+            },
+            Cell::RoundedRock => match spaces[i] {
+                Some(n) => {
+                    self.map[i][n] = Cell::RoundedRock;
+                    self.map[i][j] = Cell::Empty;
+                    spaces[i] = Some(((n as isize) + increment).max(0) as usize);
+                }
+                None => {}
+            },
+            Cell::SquareRock => spaces[i] = None,
+        }
+    }
+
     fn slide(&mut self, direction: Direction) {
         use Direction::*;
         let sz = match direction {
@@ -109,19 +139,35 @@ impl Map {
             North => {
                 for i in 0..self.map.len() {
                     for j in 0..self.width {
-                        self.roll(i, j, &mut spaces, 1);
+                        self.roll_vertical(i, j, &mut spaces, 1);
                     }
                 }
             }
-            West => todo!(),
+            West => {
+                for j in 0..self.width {
+                    for i in 0..self.map.len() {
+                        {
+                            self.roll_horizontal(i, j, &mut spaces, 1);
+                        }
+                    }
+                }
+            }
             South => {
                 for i in (0..self.map.len()).rev() {
                     for j in 0..self.width {
-                        self.roll(i, j, &mut spaces, 1);
+                        self.roll_vertical(i, j, &mut spaces, -1);
                     }
                 }
             }
-            East => todo!(),
+            East => {
+                for j in (0..self.width).rev() {
+                    for i in 0..self.map.len() {
+                        {
+                            self.roll_horizontal(i, j, &mut spaces, -1);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -138,10 +184,34 @@ impl Map {
     }
 }
 
-pub fn fourteens_task_1(f: impl BufRead) -> u64 {
+pub fn fourteens_task_2(f: impl BufRead) -> u64 {
     let mut map = Map::parse(f);
     println!("before:\n{}", map);
-    map.slide(Direction::North);
+    let max_rounds = 1_000_000_000;
+    let mut round = 0;
+    let mut previous = HashMap::new();
+    let (period, offset) = loop {
+        previous.insert(map.clone(), round);
+        for direction in Direction::all() {
+            map.slide(direction);
+        }
+        round += 1;
+
+        if let Some(n) = previous.get(&map) {
+            break ((round - n), round);
+        }
+
+        //print!("{} \r", round);
+    };
+    println!("period: {} offset: {}", period, offset);
+    let remains = max_rounds - offset;
+    let more = remains % period;
+    for _ in 0..more {
+        for direction in Direction::all() {
+            map.slide(direction);
+        }
+    }
+    println!("");
     println!("after:\n{}", map);
     map.north_weight()
 }
