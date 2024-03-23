@@ -20,7 +20,7 @@
                 }
             },
             "args": [
-                "data/input-day10-sample.txt"
+                "data/input-day17-sample3.txt"
             ],
             "cwd": "${workspaceFolder}"
         },
