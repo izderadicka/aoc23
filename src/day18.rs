@@ -37,7 +37,7 @@ impl Direction {
                 (row, col) = (row, col - steps);
             }
             Direction::Right => {
-                f(row, col, steps);
+                f(row, col + 1, steps);
                 (row, col) = (row, col + steps);
             }
             Direction::Up => {
@@ -152,50 +152,52 @@ pub fn eighteens_task_1(f: impl BufRead) -> u64 {
     println!("Max elems: {}", max_elems);
 
     let mut size = 0;
-    println!("Map: {:?}", map);
+    // println!("Map: {:?}", map);
 
     for row in 0..height as usize {
+        let mut span: Option<(i64, i64)> = None;
         let mut inside = false;
-        let mut prev_col = -1;
-        let mut span = 0;
         for (col, in_row) in map[row].iter() {
-            let span_incr = col - prev_col;
-            if *col == prev_col {
-                span += span_incr;
-            } else {
-                span = span_incr;
-            }
-            size += *in_row as u64;
-            if inside {
-                size += span as u64;
-            }
+            if let Some(s) = span {
+                if s.1 < *col {
+                    let mut is_peak = false;
+                    if row == 0 || row == (height - 1) as usize {
+                        is_peak = true;
+                    } else if s.1 - s.0 > 1 {
+                        let next_row = &map[row + 1];
+                        let start = next_row.iter().find(|n| s.0 >= n.0 && s.0 < n.0 + n.1);
+                        let end = next_row
+                            .iter()
+                            .find(|n| s.1 - 1 >= n.0 && s.1 - 1 < n.0 + 1);
 
-            let mut is_peak = false;
-            if row == 0 || row == height as usize - 1 {
-                is_peak = true;
-            } else {
-                let next_row = &map[row + 1];
+                        is_peak =
+                            (start.is_some() && end.is_some()) || (start.is_none() && end.is_none())
+                    }
+                    if !is_peak {
+                        inside = !inside;
+                    }
+                    // print!("Zed({}): {} {};", is_peak, s.0, s.1);
 
-                let start = next_row.iter().find(|(c, _)| *c == *col - span);
-                let end = next_row.iter().find(|(c, _)| *c == *col + *in_row - 1);
-                let (has_start, has_end) = (start.is_some(), end.is_some());
-
-                // println!("({}, {}): ({:?}, {:?})", row, col, start, end);
-
-                if (has_start && has_end) || (!has_start && !has_end) {
-                    is_peak = true;
+                    size += s.1 - s.0;
+                    // print!("Dira({}): {} {};", inside, s.1, col);
+                    if inside {
+                        size += *col - s.1;
+                    }
+                    span = Some((*col, *col + in_row));
+                } else {
+                    span = Some((s.0, *col + in_row));
                 }
+            } else {
+                span = Some((*col, *col + in_row));
             }
-
-            if !is_peak && span > 0 {
-                println!("Swap inside at ({}, {})", row, col);
-                inside = !inside;
-            }
-
-            prev_col = *col + *in_row;
         }
+        if let Some(s) = span {
+            // print!("Zed: {} {};", s.0, s.1);
+            size += s.1 - s.0;
+        }
+        // println!()
     }
 
     println!();
-    size
+    size as u64
 }
