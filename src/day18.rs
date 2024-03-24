@@ -1,5 +1,4 @@
 use anyhow::Context;
-use colored::{ColoredString, Colorize};
 use std::{io::BufRead, str::FromStr};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -11,7 +10,7 @@ enum Direction {
 }
 
 impl Direction {
-    fn offset(&self) -> (i32, i32) {
+    fn offset(&self) -> (i64, i64) {
         match self {
             Direction::Left => (0, -1),
             Direction::Right => (0, 1),
@@ -20,22 +19,41 @@ impl Direction {
         }
     }
 
-    fn jump(&self, pos: (i32, i32), steps: i32) -> (i32, i32) {
+    fn jump(&self, pos: (i64, i64), steps: i64) -> (i64, i64) {
         (
             pos.0 + steps * self.offset().0,
             pos.1 + steps * self.offset().1,
         )
     }
 
-    fn go<F>(&self, pos: (i32, i32), steps: i32, mut f: F) -> (i32, i32)
+    fn go<F>(&self, pos: (i64, i64), steps: i64, mut f: F) -> (i64, i64)
     where
-        F: FnMut(i32, i32),
+        F: FnMut(i64, i64, i64),
     {
         let (mut row, mut col) = pos;
-        for _ in 0..steps {
-            f(row, col);
-            (row, col) = self.jump((row, col), 1);
+        match self {
+            Direction::Left => {
+                f(row, col - steps, steps);
+                (row, col) = (row, col - steps);
+            }
+            Direction::Right => {
+                f(row, col, steps);
+                (row, col) = (row, col + steps);
+            }
+            Direction::Up => {
+                for _ in 0..steps {
+                    (row, col) = (row - 1, col);
+                    f(row, col, 1);
+                }
+            }
+            Direction::Down => {
+                for _ in 0..steps {
+                    (row, col) = (row + 1, col);
+                    f(row, col, 1);
+                }
+            }
         }
+
         (row, col)
     }
 }
@@ -44,10 +62,10 @@ impl FromStr for Direction {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "L" => Ok(Direction::Left),
-            "R" => Ok(Direction::Right),
-            "U" => Ok(Direction::Up),
-            "D" => Ok(Direction::Down),
+            "2" => Ok(Direction::Left),
+            "0" => Ok(Direction::Right),
+            "3" => Ok(Direction::Up),
+            "1" => Ok(Direction::Down),
             _ => anyhow::bail!("Unknown direction: {}", s),
         }
     }
@@ -56,7 +74,7 @@ impl FromStr for Direction {
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 struct Instruction {
     direction: Direction,
-    steps: i32,
+    steps: i64,
     color: String,
 }
 
@@ -71,13 +89,11 @@ impl FromStr for Instruction {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut parts = s.split(' ');
-        let direction = parts
-            .next()
-            .context("No direction")?
-            .parse()
-            .context("Invalid direction")?;
-        let steps = parts.next().context("No steps")?.parse()?;
+        let _direction = parts.next().context("No direction")?;
+        let _steps = parts.next().context("No steps")?;
         let color = parts.next().context("No color")?.to_string();
+        let direction: Direction = (&color[7..8]).parse()?;
+        let steps = i64::from_str_radix(&color[2..7], 16)?;
         Ok(Self {
             direction,
             steps,
@@ -92,10 +108,10 @@ pub fn eighteens_task_1(f: impl BufRead) -> u64 {
         .map(|l| l.unwrap().parse::<Instruction>().unwrap())
         .collect::<Vec<_>>();
     println!("Instructions: {:?}", instructions);
-    let mut min_row = i32::MAX;
-    let mut max_row = i32::MIN;
-    let mut min_col = i32::MAX;
-    let mut max_col = i32::MIN;
+    let mut min_row = i64::MAX;
+    let mut max_row = i64::MIN;
+    let mut min_col = i64::MAX;
+    let mut max_col = i64::MIN;
     let mut row = 0;
     let mut col = 0;
     for instruction in &instructions {
@@ -116,86 +132,70 @@ pub fn eighteens_task_1(f: impl BufRead) -> u64 {
     println!("Height: {}, Width: {}", height, width);
     println!("Row offset: {}, Col offset: {}", row_offset, col_offset);
     println!();
-
-    let mut map = vec![vec![None; width as usize]; height as usize];
+    let mut map = vec![vec![]; height as usize];
     let mut row = row_offset;
     let mut col = col_offset;
 
     for instruction in &instructions {
-        let draw = |row: i32, col: i32| {
-            map[row as usize][col as usize] = Some(Cell::Trench);
+        let draw = |row: i64, col: i64, steps: i64| {
+            map[row as usize].push((col, steps));
         };
-        (row, col) = instruction
+        let (new_row, _new_col) = instruction
             .direction
             .go((row, col), instruction.steps, draw);
+        // println!("({},{})=>({},{})", row, col, new_row, _new_col);
+        (row, col) = (new_row, _new_col);
     }
 
+    let max_elems = map.iter().map(|row| row.len()).max().unwrap();
+    map.iter_mut().for_each(|row| row.sort());
+    println!("Max elems: {}", max_elems);
+
     let mut size = 0;
+    println!("Map: {:?}", map);
 
     for row in 0..height as usize {
         let mut inside = false;
-        let mut prev_cell = None;
-        let mut in_row = 0;
-        for col in 0..width as usize {
-            let cell = map[row][col].clone();
-            if cell.is_some() {
-                size += 1;
-                if let Some(Cell::Trench) = prev_cell {
-                    in_row += 1;
-                } else {
-                    in_row = 1;
-                }
+        let mut prev_col = -1;
+        let mut span = 0;
+        for (col, in_row) in map[row].iter() {
+            let span_incr = col - prev_col;
+            if *col == prev_col {
+                span += span_incr;
             } else {
-                let mut is_peak = false;
-                if in_row > 1 {
-                    if row == 0 || row == height as usize - 1 {
-                        is_peak = true;
-                    } else {
-                        let start = map[row + 1][col-in_row].as_ref();
-                        let end = map[row + 1][col-1].as_ref();
-
-                        // println!("({}, {}): ({:?}, {:?})", row, col, start, end);
-
-                        if (start.is_some() && end.is_some()) || (start.is_none() && end.is_none()) {
-                            is_peak = true;
-                        }
-                        
-                    }
-                }
-
-                if in_row > 0 && !is_peak {
-                    inside = !inside
-                }
-
-                if inside {
-                    size += 1;
-                    map[row][col] = Some(Cell::Basin);
-                };
-                is_peak = false;
-                in_row = 0;
+                span = span_incr;
+            }
+            size += *in_row as u64;
+            if inside {
+                size += span as u64;
             }
 
-            prev_cell = cell.clone();
+            let mut is_peak = false;
+            if row == 0 || row == height as usize - 1 {
+                is_peak = true;
+            } else {
+                let next_row = &map[row + 1];
+
+                let start = next_row.iter().find(|(c, _)| *c == *col - span);
+                let end = next_row.iter().find(|(c, _)| *c == *col + *in_row - 1);
+                let (has_start, has_end) = (start.is_some(), end.is_some());
+
+                // println!("({}, {}): ({:?}, {:?})", row, col, start, end);
+
+                if (has_start && has_end) || (!has_start && !has_end) {
+                    is_peak = true;
+                }
+            }
+
+            if !is_peak && span > 0 {
+                println!("Swap inside at ({}, {})", row, col);
+                inside = !inside;
+            }
+
+            prev_col = *col + *in_row;
         }
     }
 
-    print_map(&map);
     println!();
     size
-}
-
-fn print_map(map: &Vec<Vec<Option<Cell>>>) {
-    for row in map {
-        for cell in row {
-            if let Some(c) = cell {
-                match c {
-                    Cell::Trench => print!("{}", "@".red()),
-                    Cell::Basin => print!("#"),
-                }
-            } else {
-                print!(".");
-            }
-        }
-        println!();
-    }
 }
