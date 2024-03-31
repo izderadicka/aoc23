@@ -1,3 +1,4 @@
 {
-    "editor.formatOnSave": true
+    "editor.formatOnSave": false,
+    "rust-analyzer.showUnlinkedFileNotification": false
 }

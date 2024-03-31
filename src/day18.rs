@@ -25,37 +25,6 @@ impl Direction {
             pos.1 + steps * self.offset().1,
         )
     }
-
-    fn go<F>(&self, pos: (i64, i64), steps: i64, mut f: F) -> (i64, i64)
-    where
-        F: FnMut(i64, i64, i64),
-    {
-        let (mut row, mut col) = pos;
-        match self {
-            Direction::Left => {
-                f(row, col - steps, steps);
-                (row, col) = (row, col - steps);
-            }
-            Direction::Right => {
-                f(row, col + 1, steps);
-                (row, col) = (row, col + steps);
-            }
-            Direction::Up => {
-                for _ in 0..steps {
-                    (row, col) = (row - 1, col);
-                    f(row, col, 1);
-                }
-            }
-            Direction::Down => {
-                for _ in 0..steps {
-                    (row, col) = (row + 1, col);
-                    f(row, col, 1);
-                }
-            }
-        }
-
-        (row, col)
-    }
 }
 
 impl FromStr for Direction {
@@ -102,102 +71,44 @@ impl FromStr for Instruction {
     }
 }
 
+pub fn area(poly: &Vec<(i64, i64)>) -> i64 {
+    let mut sum = 0;
+    for i in 0..poly.len() - 1 {
+        // sum += (poly[i].0 + poly[i + 1].0) * (poly[i].1 - poly[i + 1].1)
+        sum += poly[i].1 * poly[i + 1].0 - poly[i + 1].1 * poly[i].0
+    }
+    sum.abs() / 2
+}
+
 pub fn eighteens_task_1(f: impl BufRead) -> u64 {
     let instructions = f
         .lines()
         .map(|l| l.unwrap().parse::<Instruction>().unwrap())
         .collect::<Vec<_>>();
-    println!("Instructions: {:?}", instructions);
-    let mut min_row = i64::MAX;
-    let mut max_row = i64::MIN;
-    let mut min_col = i64::MAX;
-    let mut max_col = i64::MIN;
-    let mut row = 0;
-    let mut col = 0;
+    // println!("Instructions: {:?}", instructions);
+    let (mut row, mut col) = (0, 0);
+    let mut poly = vec![(row, col)];
     for instruction in &instructions {
         (row, col) = instruction.direction.jump((row, col), instruction.steps);
-        min_row = min_row.min(row);
-        max_row = max_row.max(row);
-        min_col = min_col.min(col);
-        max_col = max_col.max(col);
+        poly.push((row, col));
     }
 
-    assert!(row == 0 && col == 0);
+    println!("Poly {:?}", poly);
 
-    let height = max_row - min_row + 1;
-    let width = max_col - min_col + 1;
-    let row_offset = -min_row;
-    let col_offset = -min_col;
+    let area = area(&poly);
+    let cir: i64 = instructions.iter().map(|i| i.steps).sum();
 
-    println!("Height: {}, Width: {}", height, width);
-    println!("Row offset: {}, Col offset: {}", row_offset, col_offset);
-    println!();
-    let mut map = vec![vec![]; height as usize];
-    let mut row = row_offset;
-    let mut col = col_offset;
+    (area + cir / 2 + 1) as u64
+}
 
-    for instruction in &instructions {
-        let draw = |row: i64, col: i64, steps: i64| {
-            map[row as usize].push((col, steps));
-        };
-        let (new_row, _new_col) = instruction
-            .direction
-            .go((row, col), instruction.steps, draw);
-        // println!("({},{})=>({},{})", row, col, new_row, _new_col);
-        (row, col) = (new_row, _new_col);
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    #[test]
+    fn test_area() {
+        let p = vec![(0, 0), (0, 1), (1, 1), (1, 0), (0, 0)];
+        let a = area(&p);
+        assert_eq!(1, a);
     }
-
-    let max_elems = map.iter().map(|row| row.len()).max().unwrap();
-    map.iter_mut().for_each(|row| row.sort());
-    println!("Max elems: {}", max_elems);
-
-    let mut size = 0;
-    // println!("Map: {:?}", map);
-
-    for row in 0..height as usize {
-        let mut span: Option<(i64, i64)> = None;
-        let mut inside = false;
-        for (col, in_row) in map[row].iter() {
-            if let Some(s) = span {
-                if s.1 < *col {
-                    let mut is_peak = false;
-                    if row == 0 || row == (height - 1) as usize {
-                        is_peak = true;
-                    } else if s.1 - s.0 > 1 {
-                        let next_row = &map[row + 1];
-                        let start = next_row.iter().find(|n| s.0 >= n.0 && s.0 < n.0 + n.1);
-                        let end = next_row
-                            .iter()
-                            .find(|n| s.1 - 1 >= n.0 && s.1 - 1 < n.0 + 1);
-
-                        is_peak =
-                            (start.is_some() && end.is_some()) || (start.is_none() && end.is_none())
-                    }
-                    if !is_peak {
-                        inside = !inside;
-                    }
-                    // print!("Zed({}): {} {};", is_peak, s.0, s.1);
-
-                    size += s.1 - s.0;
-                    // print!("Dira({}): {} {};", inside, s.1, col);
-                    if inside {
-                        size += *col - s.1;
-                    }
-                    span = Some((*col, *col + in_row));
-                } else {
-                    span = Some((s.0, *col + in_row));
-                }
-            } else {
-                span = Some((*col, *col + in_row));
-            }
-        }
-        if let Some(s) = span {
-            // print!("Zed: {} {};", s.0, s.1);
-            size += s.1 - s.0;
-        }
-        // println!()
-    }
-
-    println!();
-    size as u64
 }
